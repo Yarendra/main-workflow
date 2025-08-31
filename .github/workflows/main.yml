@@ -11,26 +11,15 @@ on:
         required: false
         type: string
         default: '18'
-    secrets:
-      BOT_WEBHOOK_SECRET:
-        required: true
-      DISCORD_WEBHOOK_URL: # not used (we post to your bot server URL below), kept for future
-        required: false
-
-env:
-  BOT_ENDPOINT: https://<your-public-webhook-host>/github-webhook
 
 jobs:
   backend-tests:
     name: Laravel Backend Checks
-    if: ${{ hashFiles('**/composer.json') != '' }}
+    if: ${{ exists('**/composer.json') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
+        uses: actions/checkout@v3
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -39,7 +28,7 @@ jobs:
           extensions: mbstring, bcmath, intl
 
       - name: Cache Composer dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v3
         with:
           path: vendor
           key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
@@ -50,45 +39,32 @@ jobs:
         run: composer install --no-progress --prefer-dist --optimize-autoloader
 
       - name: Run Pint (Laravel code style)
-        run: vendor/bin/pint --test | tee backend-report.txt
+        run: vendor/bin/pint --test
 
       - name: Run PHPUnit tests
-        run: php artisan test --parallel --stop-on-failure | tee -a backend-report.txt
+        run: php artisan test --parallel --stop-on-failure
 
-      - name: Notify Discord Bot
-        if: always()
+      - name: Run ESLint for Laravel JS (resources/)
+        if: ${{ exists('resources/**/*.js') }}
         run: |
-          STATUS=${{ job.status }}
-          REPORT=$(cat backend-report.txt | tail -n 5000 | jq -Rs .)
-          curl -sS -X POST "$BOT_ENDPOINT" \
-            -H "Content-Type: application/json" \
-            -H "X-Bot-Secret: ${{ secrets.BOT_WEBHOOK_SECRET }}" \
-            -d "{
-              \"repo\": \"${{ github.repository }}\",
-              \"pr_author\": \"${{ github.actor }}\",
-              \"status\": \"$STATUS\",
-              \"pr_url\": \"https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}\",
-              \"report\": $REPORT
-            }"
+          npm install -g eslint
+          eslint "resources/**/*.js"
 
   frontend-tests:
     name: React/Expo Frontend Checks
-    if: ${{ hashFiles('**/package.json') != '' }}
+    if: ${{ exists('**/package.json') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
+        uses: actions/checkout@v3
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v3
         with:
           node-version: ${{ inputs.node-version }}
 
       - name: Cache npm dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v3
         with:
           path: ~/.npm
           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
@@ -99,23 +75,8 @@ jobs:
         run: npm ci
 
       - name: Run ESLint
-        run: npm run lint --if-present | tee frontend-report.txt
+        run: npm run lint --if-present
 
       - name: Run tests
-        run: npm test --if-present -- --watchAll=false | tee -a frontend-report.txt
+        run: npm test --if-present -- --watchAll=false
 
-      - name: Notify Discord Bot
-        if: always()
-        run: |
-          STATUS=${{ job.status }}
-          REPORT=$(cat frontend-report.txt | tail -n 5000 | jq -Rs .)
-          curl -sS -X POST "$BOT_ENDPOINT" \
-            -H "Content-Type: application/json" \
-            -H "X-Bot-Secret: ${{ secrets.BOT_WEBHOOK_SECRET }}" \
-            -d "{
-              \"repo\": \"${{ github.repository }}\",
-              \"pr_author\": \"${{ github.actor }}\",
-              \"status\": \"$STATUS\",
-              \"pr_url\": \"https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}\",
-              \"report\": $REPORT
-            }"
