@@ -1,0 +1,121 @@
+name: Org CI Workflow
+
+on:
+  workflow_call:
+    inputs:
+      php-version:
+        required: false
+        type: string
+        default: '8.2'
+      node-version:
+        required: false
+        type: string
+        default: '18'
+    secrets:
+      BOT_WEBHOOK_SECRET:
+        required: true
+      DISCORD_WEBHOOK_URL: # not used (we post to your bot server URL below), kept for future
+        required: false
+
+env:
+  BOT_ENDPOINT: https://<your-public-webhook-host>/github-webhook
+
+jobs:
+  backend-tests:
+    name: Laravel Backend Checks
+    if: ${{ hashFiles('**/composer.json') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          extensions: mbstring, bcmath, intl
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-
+
+      - name: Install Composer dependencies
+        run: composer install --no-progress --prefer-dist --optimize-autoloader
+
+      - name: Run Pint (Laravel code style)
+        run: vendor/bin/pint --test | tee backend-report.txt
+
+      - name: Run PHPUnit tests
+        run: php artisan test --parallel --stop-on-failure | tee -a backend-report.txt
+
+      - name: Notify Discord Bot
+        if: always()
+        run: |
+          STATUS=${{ job.status }}
+          REPORT=$(cat backend-report.txt | tail -n 5000 | jq -Rs .)
+          curl -sS -X POST "$BOT_ENDPOINT" \
+            -H "Content-Type: application/json" \
+            -H "X-Bot-Secret: ${{ secrets.BOT_WEBHOOK_SECRET }}" \
+            -d "{
+              \"repo\": \"${{ github.repository }}\",
+              \"pr_author\": \"${{ github.actor }}\",
+              \"status\": \"$STATUS\",
+              \"pr_url\": \"https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}\",
+              \"report\": $REPORT
+            }"
+
+  frontend-tests:
+    name: React/Expo Frontend Checks
+    if: ${{ hashFiles('**/package.json') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint --if-present | tee frontend-report.txt
+
+      - name: Run tests
+        run: npm test --if-present -- --watchAll=false | tee -a frontend-report.txt
+
+      - name: Notify Discord Bot
+        if: always()
+        run: |
+          STATUS=${{ job.status }}
+          REPORT=$(cat frontend-report.txt | tail -n 5000 | jq -Rs .)
+          curl -sS -X POST "$BOT_ENDPOINT" \
+            -H "Content-Type: application/json" \
+            -H "X-Bot-Secret: ${{ secrets.BOT_WEBHOOK_SECRET }}" \
+            -d "{
+              \"repo\": \"${{ github.repository }}\",
+              \"pr_author\": \"${{ github.actor }}\",
+              \"status\": \"$STATUS\",
+              \"pr_url\": \"https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}\",
+              \"report\": $REPORT
+            }"
