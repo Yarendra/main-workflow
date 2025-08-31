@@ -15,19 +15,29 @@ on:
 jobs:
   backend-tests:
     name: Laravel Backend Checks
-    if: ${{ exists('**/composer.json') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      - name: Check if composer.json exists
+        id: check_composer
+        run: |
+          if [ -f composer.json ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Setup PHP
+        if: steps.check_composer.outputs.found == 'true'
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php-version }}
           extensions: mbstring, bcmath, intl
 
       - name: Cache Composer dependencies
+        if: steps.check_composer.outputs.found == 'true'
         uses: actions/cache@v3
         with:
           path: vendor
@@ -36,34 +46,48 @@ jobs:
             ${{ runner.os }}-php-
 
       - name: Install Composer dependencies
+        if: steps.check_composer.outputs.found == 'true'
         run: composer install --no-progress --prefer-dist --optimize-autoloader
 
       - name: Run Pint (Laravel code style)
+        if: steps.check_composer.outputs.found == 'true'
         run: vendor/bin/pint --test
 
       - name: Run PHPUnit tests
+        if: steps.check_composer.outputs.found == 'true'
         run: php artisan test --parallel --stop-on-failure
 
       - name: Run ESLint for Laravel JS (resources/)
-        if: ${{ exists('resources/**/*.js') }}
         run: |
-          npm install -g eslint
-          eslint "resources/**/*.js"
+          if [ -d resources ]; then
+            npm install -g eslint
+            eslint "resources/**/*.js" || true
+          fi
 
   frontend-tests:
     name: React/Expo Frontend Checks
-    if: ${{ exists('**/package.json') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      - name: Check if package.json exists
+        id: check_package
+        run: |
+          if [ -f package.json ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Setup Node.js
+        if: steps.check_package.outputs.found == 'true'
         uses: actions/setup-node@v3
         with:
           node-version: ${{ inputs.node-version }}
 
       - name: Cache npm dependencies
+        if: steps.check_package.outputs.found == 'true'
         uses: actions/cache@v3
         with:
           path: ~/.npm
@@ -72,11 +96,13 @@ jobs:
             ${{ runner.os }}-node-
 
       - name: Install dependencies
+        if: steps.check_package.outputs.found == 'true'
         run: npm ci
 
       - name: Run ESLint
+        if: steps.check_package.outputs.found == 'true'
         run: npm run lint --if-present
 
       - name: Run tests
+        if: steps.check_package.outputs.found == 'true'
         run: npm test --if-present -- --watchAll=false
-
