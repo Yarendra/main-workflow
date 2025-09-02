@@ -125,6 +125,6 @@ jobs:
             STATUS="❌ Failed"
           fi
 
-          curl -H "Content-Type: application/json" \
-            -d "{\"content\": \"CI finished for **${{ github.repository }}** → $STATUS\nPR: #${{ github.event.pull_request.number }}\nLogs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
-            ${{ secrets.DISCORD_WEBHOOK_URL }}
+          curl -X POST "https://329fb0434d97.ngrok-free.app/github" \
+          -H "Content-Type: application/json" \
+          -d "{\"status\": \"$STATUS\", \"repo\": \"${{ github.repository }}\", \"run_id\": \"${{ github.run_id }}\", \"pr\": \"${{ github.event.number }}\"}"
