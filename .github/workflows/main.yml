@@ -65,7 +65,7 @@ jobs:
             prettier --check "resources/**/*.js" || true
           fi
       - name: Upload backend log
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: backend-log
           path: backend.log
@@ -117,6 +117,12 @@ jobs:
         if: steps.check_package.outputs.found == 'true'
         run: npm test --if-present -- --watchAll=false 2>&1 | tee frontend.log
 
+      - name: Upload frontend log
+        uses: actions/upload-artifact@v4
+        with:
+         name: frontend-log
+         path: frontend.log
+
   notify-discord:
     name: Notify Discord
     runs-on: ubuntu-latest
@@ -124,13 +130,13 @@ jobs:
     if: always()
     steps:
       - name: Download backend logs
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: backend-log
           path: logs/backend-log
 
       - name: Download frontend logs
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: frontend-log
           path: logs/frontend-log
