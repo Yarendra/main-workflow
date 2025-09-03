@@ -120,11 +120,15 @@ jobs:
     steps:
       - name: Send notification to Discord
         run: |
-          STATUS="✅ Success"
-          if [ "${{ needs.backend-tests.result }}" != "success" ] || [ "${{ needs.frontend-tests.result }}" != "success" ]; then
-            STATUS="❌ Failed"
-          fi
+          BACKEND="${{ needs.backend-tests.result }}"
+          FRONTEND="${{ needs.frontend-tests.result }}"
 
           curl -X POST "https://329fb0434d97.ngrok-free.app/github" \
           -H "Content-Type: application/json" \
-          -d "{\"status\": \"$STATUS\", \"repo\": \"${{ github.repository }}\", \"run_id\": \"${{ github.run_id }}\", \"pr\": \"${{ github.event.number }}\"}"
+          -d "{
+          \"repo\": \"${{ github.repository }}\",
+          \"run_id\": \"${{ github.run_id }}\",
+          \"pr\": \"${{ github.event.number }}\",
+          \"backend\": \"$BACKEND\",
+          \"frontend\": \"$FRONTEND\"
+          }"
