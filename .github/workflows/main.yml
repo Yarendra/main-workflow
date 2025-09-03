@@ -123,7 +123,7 @@ jobs:
           BACKEND="${{ needs.backend-tests.result }}"
           FRONTEND="${{ needs.frontend-tests.result }}"
 
-          curl -X POST "https://329fb0434d97.ngrok-free.app/github" \
+          curl -X POST "https://0f02abcb3950.ngrok-free.app/github" \
           -H "Content-Type: application/json" \
           -d "{
           \"repo\": \"${{ github.repository }}\",
