@@ -133,7 +133,7 @@ jobs:
           BACKEND_LOG=$(echo "$BACKEND_LOG" | jq -Rs .)
           FRONTEND_LOG=$(echo "$FRONTEND_LOG" | jq -Rs .)
 
-          curl -X POST "https://0f02abcb3950.ngrok-free.app /github" \
+          curl -X POST "https://0f02abcb3950.ngrok-free.app/github" \
           -H "Content-Type: application/json" \
           -d "{
           \"status\": \"$STATUS\",
