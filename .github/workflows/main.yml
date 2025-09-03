@@ -126,20 +126,19 @@ jobs:
           fi
 
         
-          BACKEND_LOG=$(tail -n 20 backend.log 2>/dev/null || echo "No backend logs")
-          FRONTEND_LOG=$(tail -n 20 frontend.log 2>/dev/null || echo "No frontend logs")
+          BACKEND_LOG=$(tail -n 20 logs/backend-log/backend.log 2>/dev/null || echo "No backend logs")
+          FRONTEND_LOG=$(tail -n 20 logs/frontend-log/frontend.log 2>/dev/null || echo "No frontend logs")
 
-   
           BACKEND_LOG=$(echo "$BACKEND_LOG" | jq -Rs .)
           FRONTEND_LOG=$(echo "$FRONTEND_LOG" | jq -Rs .)
 
-          curl -X POST "https://0f02abcb3950.ngrok-free.app/github" \
+          curl -X POST "https://YOUR_NGROK_URL/github" \
           -H "Content-Type: application/json" \
           -d "{
-          \"status\": \"$STATUS\",
-          \"repo\": \"${{ github.repository }}\",
-          \"run_id\": \"${{ github.run_id }}\",
-          \"pr\": \"${{ github.event.number }}\",
-          \"backend_log\": $BACKEND_LOG,
-          \"frontend_log\": $FRONTEND_LOG
+            \"status\": \"$STATUS\",
+            \"repo\": \"${{ github.repository }}\",
+            \"run_id\": \"${{ github.run_id }}\",
+            \"pr\": \"${{ github.event.number }}\",
+            \"backend_log\": $BACKEND_LOG,
+            \"frontend_log\": $FRONTEND_LOG
           }"
