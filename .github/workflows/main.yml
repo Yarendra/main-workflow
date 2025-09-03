@@ -123,6 +123,18 @@ jobs:
     needs: [backend-tests, frontend-tests]
     if: always()
     steps:
+      - name: Download backend logs
+        uses: actions/download-artifact@v3
+        with:
+          name: backend-log
+          path: logs/backend-log
+
+      - name: Download frontend logs
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-log
+          path: logs/frontend-log
+          
       - name: Send notification to Discord
         run: |
           STATUS="✅ Success"
