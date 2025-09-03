@@ -120,15 +120,26 @@ jobs:
     steps:
       - name: Send notification to Discord
         run: |
-          BACKEND="${{ needs.backend-tests.result }}"
-          FRONTEND="${{ needs.frontend-tests.result }}"
+          STATUS="✅ Success"
+          if [ "${{ needs.backend-tests.result }}" != "success" ] || [ "${{ needs.frontend-tests.result }}" != "success" ]; then
+          STATUS="❌ Failed"
+          fi
 
-          curl -X POST "https://0f02abcb3950.ngrok-free.app/github" \
+        
+          BACKEND_LOG=$(tail -n 20 backend.log 2>/dev/null || echo "No backend logs")
+          FRONTEND_LOG=$(tail -n 20 frontend.log 2>/dev/null || echo "No frontend logs")
+
+   
+          BACKEND_LOG=$(echo "$BACKEND_LOG" | jq -Rs .)
+          FRONTEND_LOG=$(echo "$FRONTEND_LOG" | jq -Rs .)
+
+          curl -X POST "https://329fb0434d97.ngrok-free.app/github" \
           -H "Content-Type: application/json" \
           -d "{
+          \"status\": \"$STATUS\",
           \"repo\": \"${{ github.repository }}\",
           \"run_id\": \"${{ github.run_id }}\",
           \"pr\": \"${{ github.event.number }}\",
-          \"backend\": \"$BACKEND\",
-          \"frontend\": \"$FRONTEND\"
+          \"backend_log\": $BACKEND_LOG,
+          \"frontend_log\": $FRONTEND_LOG
           }"
