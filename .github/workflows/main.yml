@@ -51,7 +51,7 @@ jobs:
 
       - name: Run Pint (Laravel code style)
         if: steps.check_composer.outputs.found == 'true'
-        run: vendor/bin/pint --test
+        run: vendor/bin/pint --test 2>&1 | tee backend.log
 
       - name: Run PHPUnit tests
         if: steps.check_composer.outputs.found == 'true'
@@ -64,6 +64,11 @@ jobs:
             eslint "resources/**/*.js" || true
             prettier --check "resources/**/*.js" || true
           fi
+      - name: Upload backend log
+        uses: actions/upload-artifact@v3
+        with:
+          name: backend-log
+          path: backend.log
 
   frontend-tests:
     name: React/Expo Frontend Checks
@@ -102,7 +107,7 @@ jobs:
 
       - name: Run ESLint
         if: steps.check_package.outputs.found == 'true'
-        run: npm run lint --if-present
+        run: npm run lint --if-present 2>&1 | tee frontend.log
 
       - name: Run Prettier
         if: steps.check_package.outputs.found == 'true'
@@ -110,7 +115,7 @@ jobs:
 
       - name: Run tests
         if: steps.check_package.outputs.found == 'true'
-        run: npm test --if-present -- --watchAll=false
+        run: npm test --if-present -- --watchAll=false 2>&1 | tee frontend.log
 
   notify-discord:
     name: Notify Discord
