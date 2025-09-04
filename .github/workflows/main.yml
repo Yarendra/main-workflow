@@ -68,7 +68,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-log
-          path: backend.log
+          path: log/**
+          overwrite: true
 
   frontend-tests:
     name: React/Expo Frontend Checks
@@ -121,7 +122,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
          name: frontend-log
-         path: frontend.log
+         path: logs/**
+         overwrite: true
 
   notify-discord:
     name: Notify Discord
