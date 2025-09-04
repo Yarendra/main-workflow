@@ -20,41 +20,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check if composer.json exists
-        id: check_composer
-        run: |
-          if [ -f composer.json ]; then
-            echo "found=true" >> $GITHUB_OUTPUT
-          else
-            echo "found=false" >> $GITHUB_OUTPUT
-          fi
-
       - name: Setup PHP
-        if: steps.check_composer.outputs.found == 'true'
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ inputs.php-version }}
           extensions: mbstring, bcmath, intl
 
       - name: Install Composer dependencies
-        if: steps.check_composer.outputs.found == 'true'
         run: composer install --no-progress --prefer-dist --optimize-autoloader
 
-      - name: Run Pint (Laravel code style)
-        if: steps.check_composer.outputs.found == 'true'
+      - name: Run Pint + PHPUnit
         run: |
           set +e
           vendor/bin/pint --test 2>&1 | tee backend.log
-          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          php artisan test --parallel --stop-on-failure 2>&1 | tee -a backend.log
           set -e
 
-      - name: Run PHPUnit tests
-        if: steps.check_composer.outputs.found == 'true'
-        run: |
-          set +e
-          php artisan test --parallel --stop-on-failure 2>&1 | tee -a backend.log
-          echo "exit_code=$?" >> $GITHUB_OUTPUT
-          set -e
+      - name: Upload backend log
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-log
+          path: backend.log
 
   frontend-tests:
     name: React/Expo Frontend Checks
@@ -63,34 +49,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check if package.json exists
-        id: check_package
-        run: |
-          if [ -f package.json ]; then
-            echo "found=true" >> $GITHUB_OUTPUT
-          else
-            echo "found=false" >> $GITHUB_OUTPUT
-          fi
-
       - name: Setup Node.js
-        if: steps.check_package.outputs.found == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
 
       - name: Install dependencies
-        if: steps.check_package.outputs.found == 'true'
         run: npm ci
 
       - name: Run ESLint + Prettier + Tests
-        if: steps.check_package.outputs.found == 'true'
         run: |
           set +e
           npm run lint --if-present 2>&1 | tee frontend.log
           npx prettier --check "**/*.{js,jsx,ts,tsx,json,css,md}" 2>&1 | tee -a frontend.log
           npm test --if-present -- --watchAll=false 2>&1 | tee -a frontend.log
-          echo "exit_code=$?" >> $GITHUB_OUTPUT
           set -e
+
+      - name: Upload frontend log
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-log
+          path: frontend.log
 
   notify-discord:
     name: Notify Discord
@@ -98,10 +77,22 @@ jobs:
     needs: [backend-tests, frontend-tests]
     if: always()
     steps:
-      - name: Collect logs
+      - name: Download backend logs
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-log
+          path: logs
+
+      - name: Download frontend logs
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-log
+          path: logs
+
+      - name: Send notification to Discord
         run: |
-          BACKEND_LOG=$(tail -n 30 backend.log 2>/dev/null || echo "No backend logs")
-          FRONTEND_LOG=$(tail -n 30 frontend.log 2>/dev/null || echo "No frontend logs")
+          BACKEND_LOG=$(tail -n 30 logs/backend.log 2>/dev/null || echo "No backend logs")
+          FRONTEND_LOG=$(tail -n 30 logs/frontend.log 2>/dev/null || echo "No frontend logs")
 
           BACKEND_LOG=$(echo "$BACKEND_LOG" | jq -Rs .)
           FRONTEND_LOG=$(echo "$FRONTEND_LOG" | jq -Rs .)
