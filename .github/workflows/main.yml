@@ -59,8 +59,13 @@ jobs:
     steps:
       - name: Send notification to Discord
         run: |
-          STATUS="✅ Success"
+          BACKEND="success"
           if [ "${{ needs.laravel-tests.result }}" != "success" ]; then
+            BACKEND="failure"
+          fi
+
+          STATUS="✅ Success"
+          if [ "$BACKEND" != "success" ]; then
             STATUS="❌ Failed"
           fi
 
@@ -68,7 +73,7 @@ jobs:
           if [ -z "$BACKEND_LOG" ]; then
             BACKEND_LOG="\"\""
           fi
-          
+
           curl -X POST "https://0f02abcb3950.ngrok-free.app/github" \
           -H "Content-Type: application/json" \
           -d "{
@@ -76,5 +81,6 @@ jobs:
             \"repo\": \"${{ github.repository }}\",
             \"run_id\": \"${{ github.run_id }}\",
             \"pr\": \"${{ github.event.pull_request.number }}\",
+            \"backend\": \"$BACKEND\",
             \"backend_log\": $BACKEND_LOG
           }"
