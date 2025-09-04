@@ -1,14 +1,20 @@
 name: Org CI Workflow
 
 on:
-  pull_request:
-    paths:
-      - '**/*.php'
+  workflow_call:
+    inputs:
+      php-version:
+        description: "PHP version to use"
+        required: false
+        type: string
+        default: '8.2'
 
 jobs:
-  laravel-pint:
-    name: Laravel Pint Check
+  laravel-tests:
+    name: Laravel Pint + PHPUnit
     runs-on: ubuntu-latest
+    outputs:
+      log: ${{ steps.logs.outputs.cleaned_log }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -16,7 +22,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: ${{ inputs.php-version }}
           extensions: mbstring, bcmath, intl
 
       - name: Install Composer dependencies
@@ -25,29 +31,36 @@ jobs:
       - name: Run Pint
         run: |
           set +e
-          vendor/bin/pint --test 2>&1 | tee pint.log
+          vendor/bin/pint --test 2>&1 | tee test.log
           EXIT_CODE=${PIPESTATUS[0]}
           set -e
           exit $EXIT_CODE
 
-      - name: Save last 30 lines of Pint log
+      - name: Run PHPUnit
+        run: |
+          set +e
+          php artisan test --parallel --stop-on-failure 2>&1 | tee -a test.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          set -e
+          exit $EXIT_CODE
+
+      - name: Save last 30 lines of log
         id: logs
         run: |
-          TAIL_LOG=$(tail -n 30 pint.log 2>/dev/null || echo "No pint logs")
-          # Escape log for JSON
+          TAIL_LOG=$(tail -n 30 test.log 2>/dev/null || echo "No logs")
           CLEAN_LOG=$(echo "$TAIL_LOG" | jq -Rs .)
-          echo "LOG=$CLEAN_LOG" >> $GITHUB_ENV
+          echo "cleaned_log=$CLEAN_LOG" >> $GITHUB_OUTPUT
 
   notify-discord:
     name: Notify Discord
     runs-on: ubuntu-latest
-    needs: [laravel-pint]
+    needs: [laravel-tests]
     if: always()
     steps:
       - name: Send notification to Discord
         run: |
           STATUS="✅ Success"
-          if [ "${{ needs.laravel-pint.result }}" != "success" ]; then
+          if [ "${{ needs.laravel-tests.result }}" != "success" ]; then
             STATUS="❌ Failed"
           fi
 
@@ -58,5 +71,5 @@ jobs:
             \"repo\": \"${{ github.repository }}\",
             \"run_id\": \"${{ github.run_id }}\",
             \"pr\": \"${{ github.event.pull_request.number }}\",
-            \"backend_log\": $LOG
+            \"backend_log\": ${{ needs.laravel-tests.outputs.log }}
           }"
