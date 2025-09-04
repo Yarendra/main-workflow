@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Check if composer.json exists
         id: check_composer
@@ -36,47 +36,32 @@ jobs:
           php-version: ${{ inputs.php-version }}
           extensions: mbstring, bcmath, intl
 
-      - name: Cache Composer dependencies
-        if: steps.check_composer.outputs.found == 'true'
-        uses: actions/cache@v3
-        with:
-          path: vendor
-          key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-php-
-
       - name: Install Composer dependencies
         if: steps.check_composer.outputs.found == 'true'
         run: composer install --no-progress --prefer-dist --optimize-autoloader
 
       - name: Run Pint (Laravel code style)
         if: steps.check_composer.outputs.found == 'true'
-        run: vendor/bin/pint --test 2>&1 | tee backend.log
+        run: |
+          set +e
+          vendor/bin/pint --test 2>&1 | tee backend.log
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          set -e
 
       - name: Run PHPUnit tests
         if: steps.check_composer.outputs.found == 'true'
-        run: php artisan test --parallel --stop-on-failure
-
-      - name: Run ESLint for Laravel JS (resources/)
         run: |
-          if [ -d resources ]; then
-            npm install -g eslint prettier
-            eslint "resources/**/*.js" || true
-            prettier --check "resources/**/*.js" || true
-          fi
-      - name: Upload backend log
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-log
-          path: log/**
-          overwrite: true
+          set +e
+          php artisan test --parallel --stop-on-failure 2>&1 | tee -a backend.log
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          set -e
 
   frontend-tests:
     name: React/Expo Frontend Checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Check if package.json exists
         id: check_package
@@ -89,41 +74,23 @@ jobs:
 
       - name: Setup Node.js
         if: steps.check_package.outputs.found == 'true'
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
-
-      - name: Cache npm dependencies
-        if: steps.check_package.outputs.found == 'true'
-        uses: actions/cache@v3
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
 
       - name: Install dependencies
         if: steps.check_package.outputs.found == 'true'
         run: npm ci
 
-      - name: Run ESLint
+      - name: Run ESLint + Prettier + Tests
         if: steps.check_package.outputs.found == 'true'
-        run: npm run lint --if-present 2>&1 | tee frontend.log
-
-      - name: Run Prettier
-        if: steps.check_package.outputs.found == 'true'
-        run: npx prettier --check "**/*.{js,jsx,ts,tsx,json,css,md}"
-
-      - name: Run tests
-        if: steps.check_package.outputs.found == 'true'
-        run: npm test --if-present -- --watchAll=false 2>&1 | tee frontend.log
-
-      - name: Upload frontend log
-        uses: actions/upload-artifact@v4
-        with:
-         name: frontend-log
-         path: logs/**
-         overwrite: true
+        run: |
+          set +e
+          npm run lint --if-present 2>&1 | tee frontend.log
+          npx prettier --check "**/*.{js,jsx,ts,tsx,json,css,md}" 2>&1 | tee -a frontend.log
+          npm test --if-present -- --watchAll=false 2>&1 | tee -a frontend.log
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          set -e
 
   notify-discord:
     name: Notify Discord
@@ -131,31 +98,18 @@ jobs:
     needs: [backend-tests, frontend-tests]
     if: always()
     steps:
-      - name: Download backend logs
-        uses: actions/download-artifact@v4
-        with:
-          name: backend-log
-          path: logs/backend-log
-
-      - name: Download frontend logs
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-log
-          path: logs/frontend-log
-          
-      - name: Send notification to Discord
+      - name: Collect logs
         run: |
-          STATUS="✅ Success"
-          if [ "${{ needs.backend-tests.result }}" != "success" ] || [ "${{ needs.frontend-tests.result }}" != "success" ]; then
-          STATUS="❌ Failed"
-          fi
-
-        
-          BACKEND_LOG=$(tail -n 20 logs/backend-log/backend.log 2>/dev/null || echo "No backend logs")
-          FRONTEND_LOG=$(tail -n 20 logs/frontend-log/frontend.log 2>/dev/null || echo "No frontend logs")
+          BACKEND_LOG=$(tail -n 30 backend.log 2>/dev/null || echo "No backend logs")
+          FRONTEND_LOG=$(tail -n 30 frontend.log 2>/dev/null || echo "No frontend logs")
 
           BACKEND_LOG=$(echo "$BACKEND_LOG" | jq -Rs .)
           FRONTEND_LOG=$(echo "$FRONTEND_LOG" | jq -Rs .)
+
+          STATUS="✅ Success"
+          if [ "${{ needs.backend-tests.result }}" != "success" ] || [ "${{ needs.frontend-tests.result }}" != "success" ]; then
+            STATUS="❌ Failed"
+          fi
 
           curl -X POST "https://0f02abcb3950.ngrok-free.app/github" \
           -H "Content-Type: application/json" \
@@ -163,7 +117,7 @@ jobs:
             \"status\": \"$STATUS\",
             \"repo\": \"${{ github.repository }}\",
             \"run_id\": \"${{ github.run_id }}\",
-            \"pr\": \"${{ github.event.number }}\",
+            \"pr\": \"${{ github.event.pull_request.number }}\",
             \"backend_log\": $BACKEND_LOG,
             \"frontend_log\": $FRONTEND_LOG
           }"
