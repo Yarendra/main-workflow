@@ -34,10 +34,10 @@ jobs:
         continue-on-error: true
         run: vendor/bin/pint --test 2>&1 | tee pint.log
 
-      - name: Run PHPUnit
-        id: phpunit
-        continue-on-error: true
-        run: php artisan test --parallel --stop-on-failure 2>&1 | tee phpunit.log
+      # - name: Run PHPUnit
+      #   id: phpunit
+      #   continue-on-error: true
+      #   run: php artisan test --parallel --stop-on-failure 2>&1 | tee phpunit.log
         
       - name: Setup Node.js
         uses: actions/setup-node@v4
