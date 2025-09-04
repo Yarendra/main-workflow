@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       log: ${{ steps.logs.outputs.cleaned_log }}
+      result: ${{ steps.set-result.outputs.job_result }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,20 +30,17 @@ jobs:
         run: composer install --no-progress --prefer-dist --optimize-autoloader
 
       - name: Run Pint
-        run: |
-          set +e
-          vendor/bin/pint --test 2>&1 | tee test.log
-          EXIT_CODE=${PIPESTATUS[0]}
-          set -e
-          exit $EXIT_CODE
+        id: pint
+        continue-on-error: true
+        run: vendor/bin/pint --test 2>&1 | tee pint.log
 
       - name: Run PHPUnit
-        run: |
-          set +e
-          php artisan test --parallel --stop-on-failure 2>&1 | tee -a test.log
-          EXIT_CODE=${PIPESTATUS[0]}
-          set -e
-          exit $EXIT_CODE
+        id: phpunit
+        continue-on-error: true
+        run: php artisan test --parallel --stop-on-failure 2>&1 | tee phpunit.log
+
+      - name: Merge logs
+        run: cat pint.log phpunit.log > test.log
 
       - name: Save last 30 lines of log
         id: logs
@@ -50,6 +48,15 @@ jobs:
           TAIL_LOG=$(tail -n 30 test.log 2>/dev/null || echo "No logs")
           CLEAN_LOG=$(echo "$TAIL_LOG" | jq -Rs .)
           echo "cleaned_log=$CLEAN_LOG" >> $GITHUB_OUTPUT
+
+      - name: Set final result
+        id: set-result
+        run: |
+          if [ "${{ steps.pint.outcome }}" = "failure" ] || [ "${{ steps.phpunit.outcome }}" = "failure" ]; then
+            echo "job_result=failure" >> $GITHUB_OUTPUT
+          else
+            echo "job_result=success" >> $GITHUB_OUTPUT
+          fi
 
   notify-discord:
     name: Notify Discord
@@ -59,11 +66,7 @@ jobs:
     steps:
       - name: Send notification to Discord
         run: |
-          BACKEND="success"
-          if [ "${{ needs.laravel-tests.result }}" != "success" ]; then
-            BACKEND="failure"
-          fi
-
+          BACKEND="${{ needs.laravel-tests.outputs.result }}"
           STATUS="✅ Success"
           if [ "$BACKEND" != "success" ]; then
             STATUS="❌ Failed"
