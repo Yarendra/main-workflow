@@ -49,22 +49,14 @@ jobs:
         id: prettier
         continue-on-error : true
         run: |
-          set +e
           npx prettier --check . 2>&1 | tee -a test.log
-          EXIT_CODE=${PIPESTATUS[0]}
-          set -e
-          exit $EXIT_CODE
-
+          
       - name: Run ESLint
         id: ESLint
         continue-on-error : true
         run: |
-          set +e
           npx eslint . --max-warnings=0 2>&1 | tee -a test.log
-          EXIT_CODE=${PIPESTATUS[0]}
-          set -e
-          exit $EXIT_CODE
-
+          
       - name: Merge logs
         run: cat pint.log phpunit.log > test.log
 
