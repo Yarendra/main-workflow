@@ -63,7 +63,7 @@ jobs:
           if [ "${{ needs.laravel-tests.result }}" != "success" ]; then
             STATUS="❌ Failed"
           fi
-
+          
           curl -X POST "https://0f02abcb3950.ngrok-free.app/github" \
           -H "Content-Type: application/json" \
           -d "{
