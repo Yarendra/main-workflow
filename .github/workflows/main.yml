@@ -63,6 +63,11 @@ jobs:
           if [ "${{ needs.laravel-tests.result }}" != "success" ]; then
             STATUS="❌ Failed"
           fi
+
+          BACKEND_LOG='${{ needs.laravel-tests.outputs.log }}'
+          if [ -z "$BACKEND_LOG" ]; then
+            BACKEND_LOG="\"\""
+          fi
           
           curl -X POST "https://0f02abcb3950.ngrok-free.app/github" \
           -H "Content-Type: application/json" \
@@ -71,5 +76,5 @@ jobs:
             \"repo\": \"${{ github.repository }}\",
             \"run_id\": \"${{ github.run_id }}\",
             \"pr\": \"${{ github.event.pull_request.number }}\",
-            \"backend_log\": ${{ needs.laravel-tests.outputs.log }}
+            \"backend_log\": $BACKEND_LOG
           }"
