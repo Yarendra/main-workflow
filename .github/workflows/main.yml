@@ -73,5 +73,5 @@ jobs:
             \"repo\": \"${{ github.repository }}\",
             \"run_id\": \"${{ github.run_id }}\",
             \"pr\": \"${{ github.event.pull_request.number }}\",
-            \"backend_log\": $BACKEND_LOG,
+            \"backend_log\": $BACKEND_LOG
           }"
