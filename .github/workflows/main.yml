@@ -27,6 +27,8 @@ jobs:
           extensions: mbstring, bcmath, intl
 
       - name: Install Composer dependencies
+        id: composer
+        continue-on-error: true
         run: composer install --no-progress --prefer-dist --optimize-autoloader
 
       - name: Run Pint
