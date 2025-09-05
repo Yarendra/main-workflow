@@ -95,7 +95,7 @@ jobs:
             BACKEND_LOG="\"\""
           fi
 
-          curl -X POST "https://discord-bot-blue-tau.vercel.app/github" \
+          curl -X POST "https://6f87f61ee2b1.ngrok-free.app/api/github" \
           -H "Content-Type: application/json" \
           -d "{
             \"status\": \"$STATUS\",
