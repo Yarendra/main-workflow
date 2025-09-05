@@ -97,7 +97,7 @@ jobs:
             BACKEND_LOG="\"\""
           fi
 
-          curl -X POST "https://ea667f01e5f6.ngrok-free.app/api/github" \
+          curl -X POST "https://3116861a8a64.ngrok-free.app/api/github" \
           -H "Content-Type: application/json" \
           -d "{
             \"status\": \"$STATUS\",
