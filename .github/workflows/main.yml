@@ -5,15 +5,21 @@ on:
     types: [trigger-org-ci]
 
 jobs:
-  PINT:
-    name: PINT
+  laravel-tests:
+    name: Laravel PINT + Prettier + ESLint
     runs-on: ubuntu-latest
     outputs:
       log: ${{ steps.logs.outputs.cleaned_log }}
       result: ${{ steps.set-result.outputs.job_result }}
     steps:
-      - name: Checkout repository
+    
+      - name: Checkout PR Code
         uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.client_payload.branch_repo }}
+          ref: refs/pull/${{ github.event.client_payload.pull_request }}/merge
+          token: ${{ secrets.PAT_FOR_ORG_REPOS }}
+          path: project   
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -21,108 +27,64 @@ jobs:
           php-version: ${{ github.event.client_payload.php_version }}
           extensions: mbstring, bcmath, intl
 
-      - name: Install Composer dependencies
-        run: composer install --no-progress --prefer-dist --optimize-autoloader
 
-      - name: Run Pint
+      - name: Install Composer dependencies
+        id: composer
+        continue-on-error: true
+        run: composer install --no-progress --prefer-dist --optimize-autoloader
+        working-directory: project
+
+      - name: Run PINT
         id: pint
         continue-on-error: true
-        run: vendor/bin/pint --test 2>&1 | tee -a test.log
-
-      - name: Save last 30 lines of log
-        id: logs
-        run: |
-          TAIL_LOG=$(tail -n 30 test.log 2>/dev/null || echo "No logs")
-          CLEAN_LOG=$(echo "$TAIL_LOG" | jq -Rs .)
-          echo "cleaned_log=$CLEAN_LOG" >> $GITHUB_OUTPUT
-
-      - name: Set final result
-        id: set-result
-        run: |
-          if [ "${{ steps.pint.outcome }}" = "failure" ]; then
-            echo "job_result=failure" >> $GITHUB_OUTPUT
-          else
-            echo "job_result=success" >> $GITHUB_OUTPUT
-          fi
-
-  Prettier:
-    name: Prettier
-    runs-on: ubuntu-latest
-    outputs:
-      log: ${{ steps.logs.outputs.cleaned_log }}
-      result: ${{ steps.set-result.outputs.job_result }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+        run: vendor/bin/pint --test 2>&1 | tee -a project/test.log
+        working-directory: project
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
 
-      - name: Install JS dependencies
-        run: npm install
 
-      - name: Run Prettier (auto fix)
+      - name: Install JS dependencies
+        continue-on-error: true
+        run: npm install
+        working-directory: project
+
+
+      - name: Run Prettier
         id: prettier
         continue-on-error: true
-        run: npx prettier --write resources/ 2>&1 | tee -a test.log
-
-      - name: Save last 30 lines of log
-        id: logs
-        run: |
-          TAIL_LOG=$(tail -n 30 test.log 2>/dev/null || echo "No logs")
-          CLEAN_LOG=$(echo "$TAIL_LOG" | jq -Rs .)
-          echo "cleaned_log=$CLEAN_LOG" >> $GITHUB_OUTPUT
-
-      - name: Set final result
-        id: set-result
-        run: |
-          if [ "${{ steps.prettier.outcome }}" = "failure" ]; then
-            echo "job_result=failure" >> $GITHUB_OUTPUT
-          else
-            echo "job_result=success" >> $GITHUB_OUTPUT
-          fi
-
-  ESLint:
-    name: ESLint
-    runs-on: ubuntu-latest
-    outputs:
-      log: ${{ steps.logs.outputs.cleaned_log }}
-      result: ${{ steps.set-result.outputs.job_result }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-
-      - name: Install JS dependencies
-        run: npm install
+        run: npx prettier --write resources/ 2>&1 | tee -a project/test.log
+        working-directory: project
 
       - name: Run ESLint
         id: eslint
         continue-on-error: true
-        run: npx eslint resources/ --max-warnings=0 2>&1 | tee -a test.log
+        run: npx eslint resources/ --max-warnings=0 2>&1 | tee -a project/test.log
+        working-directory: project
 
       - name: Save last 30 lines of log
         id: logs
         run: |
-          TAIL_LOG=$(tail -n 30 test.log 2>/dev/null || echo "No logs")
+          TAIL_LOG=$(tail -n 30 project/test.log 2>/dev/null || echo "No logs")
           CLEAN_LOG=$(echo "$TAIL_LOG" | jq -Rs .)
           echo "cleaned_log=$CLEAN_LOG" >> $GITHUB_OUTPUT
 
+    
       - name: Set final result
         id: set-result
         run: |
-          if [ "${{ steps.eslint.outcome }}" = "failure" ]; then
+          if [ "${{ steps.pint.outcome }}" = "failure" ] || \
+             [ "${{ steps.prettier.outcome }}" = "failure" ] || \
+             [ "${{ steps.eslint.outcome }}" = "failure" ]; then
             echo "job_result=failure" >> $GITHUB_OUTPUT
           else
             echo "job_result=success" >> $GITHUB_OUTPUT
-          fi
+
 
   notify-discord:
     name: Notify Discord
     runs-on: ubuntu-latest
-    needs: [PINT, Prettier, ESLint]
+    needs: [laravel-tests]
     if: always()
     steps:
       - name: Debug run
@@ -133,19 +95,17 @@ jobs:
       - name: Send notification to Discord
         run: |
           cat << EOF > log.txt
-          ${{ needs.PINT.outputs.log }}
-          ${{ needs.Prettier.outputs.log }}
-          ${{ needs.ESLint.outputs.log }}
+          ${{ needs.laravel-tests.outputs.log }}
           EOF
 
           PAYLOAD=$(jq -n \
             --arg repo "${{ github.event.client_payload.branch_repo }}" \
             --arg run_id "${{ github.run_id }}" \
             --arg pr "${{ github.event.client_payload.pull_request }}" \
-            --arg pint "${{ needs.PINT.outputs.result }}" \
-            --arg prettier "${{ needs.Prettier.outputs.result }}" \
-            --arg eslint "${{ needs.ESLint.outputs.result }}" \
-            --argjson backend_log "$(cat log.txt)" \
+            --arg pint "${{ steps.pint.outcome }}" \
+            --arg prettier "${{ steps.prettier.outcome }}" \
+            --arg eslint "${{ steps.eslint.outcome }}" \
+            --arg backend_log "$(cat log.txt)" \
             '{
               "repo": $repo,
               "run_id": $run_id,
