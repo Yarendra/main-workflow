@@ -97,13 +97,14 @@ jobs:
             BACKEND_LOG="\"\""
           fi
 
-          curl -X POST "https://0d5145ebd714.ngrok-free.app/github-pr?token=5hZWgZKNJUZJuiSvQmAwOw3nKtAOVbXH4maxALuw58728123" \
-          -H "Content-Type: application/json" \
-          -d "{
-            \"status\": \"$STATUS\",
-            \"repo\": \"${{ github.repository }}\",
-            \"run_id\": \"${{ github.run_id }}\",
-            \"pr\": \"${{ github.event.pull_request.number }}\",
-            \"backend\": \"$BACKEND\",
-            \"backend_log\": $BACKEND_LOG
-          }"
+          curl -X POST "${{ secrets.BOT_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.BOT_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"status\": \"$STATUS\",
+              \"repo\": \"${{ github.repository }}\",
+              \"run_id\": \"${{ github.run_id }}\",
+              \"pr\": \"${{ github.event.pull_request.number }}\",
+              \"backend\": \"$BACKEND\",
+              \"backend_log\": $BACKEND_LOG
+            }"
