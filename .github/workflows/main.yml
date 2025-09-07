@@ -112,7 +112,7 @@ jobs:
           --arg pint "${{ needs.laravel-tests.result }}" \
           --arg prettier "${{ needs.laravel-tests.result }}" \
           --arg eslint "${{ needs.laravel-tests.result }}" \
-          --argjson backend_log "${{ needs.laravel-tests.outputs.log }}" \
+          --arg backend_log "${{ needs.laravel-tests.outputs.log }}" \
           '{
             "repo": $repo,
             "run_id": $run_id,
