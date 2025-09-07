@@ -77,12 +77,18 @@ jobs:
           
     - name: Send notification to Discord
       run: |
-          # Use a heredoc to build the JSON payload safely
-          PAYLOAD=$(jq -n --arg backend "${{ needs.laravel-tests.outputs.result }}" \
+          # Use a here document to create a temporary file with the log content
+          cat << EOF > log.txt
+          ${{ needs.laravel-tests.outputs.log }}
+          EOF
+          
+          # Now, read from the temporary file to avoid shell syntax errors
+          PAYLOAD=$(jq -n \
+            --arg backend "${{ needs.laravel-tests.outputs.result }}" \
             --arg repo "${{ github.event.client_payload.branch_repo }}" \
             --arg run_id "${{ github.run_id }}" \
             --arg pr "${{ github.event.client_payload.pull_request }}" \
-            --arg backend_log "${{ needs.laravel-tests.outputs.log }}" \
+            --argjson backend_log "$(cat log.txt)" \
             '{"status": (if $backend == "success" then "✅ Success" else "❌ Failed" end), "repo": $repo, "run_id": $run_id, "pr": $pr, "backend": $backend, "backend_log": $backend_log}')
             
           # Send the notification with the properly formatted payload
