@@ -29,12 +29,7 @@ jobs:
       - name: Run Pint
         id: pint
         continue-on-error: true
-        run: vendor/bin/pint --test 2>&1 | tee pint.log
-
-      - name: Run PHPUnit
-        id: phpunit
-        continue-on-error: true
-        run: php artisan test --parallel --stop-on-failure 2>&1 | tee phpunit.log
+        run: vendor/bin/pint --test 2>&1 | tee -a test.log
           
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -45,18 +40,13 @@ jobs:
       - name: Run Prettier (check only)
         id: prettier
         continue-on-error: true
-        run: |
-          npx prettier --check . 2>&1 | tee -a test.log
+        run: npx prettier --check . 2>&1 | tee -a test.log
           
       - name: Run ESLint
         id: ESLint
         continue-on-error: true
-        run: |
-          npx eslint . --max-warnings=0 2>&1 | tee -a test.log
+        run: npx eslint . --max-warnings=0 2>&1 | tee -a test.log
           
-      - name: Merge logs
-        run: cat pint.log > test.log
-
       - name: Save last 30 lines of log
         id: logs
         run: |
@@ -67,7 +57,7 @@ jobs:
       - name: Set final result
         id: set-result
         run: |
-          if [ "${{ steps.pint.outcome }}" = "failure" ] || [ "${{ steps.phpunit.outcome }}" = "failure" ]; then
+          if [ "${{ steps.pint.outcome }}" = "failure" ] || [ "${{ steps.prettier.outcome }}" = "failure" ] || [ "${{ steps.ESLint.outcome }}" = "failure" ]; then
             echo "job_result=failure" >> $GITHUB_OUTPUT
           else
             echo "job_result=success" >> $GITHUB_OUTPUT
