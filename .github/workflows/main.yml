@@ -35,6 +35,7 @@ jobs:
         uses: actions/setup-node@v4
 
       - name: Install JS dependencies
+        continue-on-error: true
         run: npm install
           
       - name: Run Prettier (check only)
