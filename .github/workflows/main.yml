@@ -65,9 +65,13 @@ jobs:
       - name: Save last 30 lines of log
         id: logs
         run: |
-          TAIL_LOG=$(tail -n 30 project/test.log 2>/dev/null || echo "No logs")
-          CLEAN_LOG=$(echo "$TAIL_LOG" | jq -Rs .)
-          echo "cleaned_log=$CLEAN_LOG" >> $GITHUB_OUTPUT
+          if [ -f project/test.log ]; then
+            TAIL_LOG=$(tail -n 30 project/test.log)
+          else
+            TAIL_LOG="No logs"
+          fi
+          CLEAN_LOG=$(printf '%s' "$TAIL_LOG" | jq -Rs .)
+          echo "cleaned_log=$CLEAN_LOG" >> "$GITHUB_OUTPUT"
 
     
       - name: Set final result
