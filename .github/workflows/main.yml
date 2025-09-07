@@ -66,12 +66,14 @@ jobs:
         id: logs
         run: |
           if [ -f project/test.log ]; then
-            TAIL_LOG=$(tail -n 30 project/test.log)
+            LOG_CONTENT=$(tail -n 30 project/test.log)
           else
-            TAIL_LOG="No logs"
+            LOG_CONTENT="No logs"
           fi
-          CLEAN_LOG=$(printf '%s' "$TAIL_LOG" | jq -Rs .)
-          echo "cleaned_log=$CLEAN_LOG" >> "$GITHUB_OUTPUT"
+
+          echo "cleaned_log<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$LOG_CONTENT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
     
       - name: Set final result
@@ -106,7 +108,7 @@ jobs:
           --arg pint "${{ needs.laravel-tests.result }}" \
           --arg prettier "${{ needs.laravel-tests.result }}" \
           --arg eslint "${{ needs.laravel-tests.result }}" \
-          --argjson backend_log ${{ needs.laravel-tests.outputs.log }} \
+          --argjson backend_log "${{ needs.laravel-tests.outputs.log }}" \
           '{
             "repo": $repo,
             "run_id": $run_id,
