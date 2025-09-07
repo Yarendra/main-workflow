@@ -79,6 +79,7 @@ jobs:
             echo "job_result=failure" >> $GITHUB_OUTPUT
           else
             echo "job_result=success" >> $GITHUB_OUTPUT
+          fi
 
 
   notify-discord:
