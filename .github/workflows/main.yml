@@ -1,13 +1,8 @@
 name: Org CI Workflow
 
 on:
-  workflow_call:
-    inputs:
-      php-version:
-        description: "PHP version to use"
-        required: false
-        type: string
-        default: '8.2'
+  repository_dispatch:
+    types: [trigger-org-ci]
 
 jobs:
   laravel-tests:
@@ -23,7 +18,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: ${{ inputs.php-version }}
+          php-version: ${{ github.event.client_payload.php_version }}
           extensions: mbstring, bcmath, intl
 
       - name: Install Composer dependencies
@@ -36,26 +31,26 @@ jobs:
         continue-on-error: true
         run: vendor/bin/pint --test 2>&1 | tee pint.log
 
-      # - name: Run PHPUnit
-      #   id: phpunit
-      #   continue-on-error: true
-      #   run: php artisan test --parallel --stop-on-failure 2>&1 | tee phpunit.log
-        
+      - name: Run PHPUnit
+        id: phpunit
+        continue-on-error: true
+        run: php artisan test --parallel --stop-on-failure 2>&1 | tee phpunit.log
+          
       - name: Setup Node.js
         uses: actions/setup-node@v4
 
       - name: Install JS dependencies
         run: npm install
-        
+          
       - name: Run Prettier (check only)
         id: prettier
-        continue-on-error : true
+        continue-on-error: true
         run: |
           npx prettier --check . 2>&1 | tee -a test.log
           
       - name: Run ESLint
         id: ESLint
-        continue-on-error : true
+        continue-on-error: true
         run: |
           npx eslint . --max-warnings=0 2>&1 | tee -a test.log
           
@@ -84,11 +79,11 @@ jobs:
     needs: [laravel-tests]
     if: always()
     steps:
-    - name : Debug run
+    - name: Debug run
       run: |
         echo "BOT_URL = ${{ secrets.BOT_URL }}"
         echo "BOT_TOKEN = ${{ secrets.BOT_TOKEN }}"
-        
+          
     - name: Send notification to Discord
       run: |
           BACKEND="${{ needs.laravel-tests.outputs.result }}"
@@ -109,7 +104,7 @@ jobs:
               \"status\": \"$STATUS\",
               \"repo\": \"${{ github.repository }}\",
               \"run_id\": \"${{ github.run_id }}\",
-              \"pr\": \"${{ github.event.pull_request.number }}\",
+              \"pr\": \"${{ github.event.client_payload.pull_request }}\",
               \"backend\": \"$BACKEND\",
               \"backend_log\": $BACKEND_LOG
             }"
