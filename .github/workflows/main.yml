@@ -92,7 +92,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{
               \"status\": \"$STATUS\",
-              \"repo\": \"${{ github.repository }}\",
+              \"repo\": \"${{ github.event.client_payload.branch_repo }}\",
               \"run_id\": \"${{ github.run_id }}\",
               \"pr\": \"${{ github.event.client_payload.pull_request }}\",
               \"backend\": \"$BACKEND\",
