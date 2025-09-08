@@ -71,8 +71,6 @@ jobs:
         run: |
           if [ -f test.log ]; then
             LOG_CONTENT=$(tail -n 30 test.log)
-          else
-            LOG_CONTENT="No logs"
           fi
 
           echo "cleaned_log<<EOF" >> "$GITHUB_OUTPUT"
