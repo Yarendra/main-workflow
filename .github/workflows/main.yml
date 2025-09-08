@@ -10,6 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       log: ${{ steps.logs.outputs.cleaned_log }}
+      pint: ${{ steps.pint.outputs.exit_code }}
+      prettier: ${{ steps.prettier.outputs.exit_code }}
+      eslint: ${{ steps.eslint.outputs.exit_code }}
       result: ${{ steps.set-result.outputs.job_result }}
     steps:
     
@@ -31,7 +34,6 @@ jobs:
           php-version: ${{ github.event.client_payload.php_version }}
           extensions: mbstring, bcmath, intl
 
-
       - name: Install Composer dependencies
         id: composer
         continue-on-error: true
@@ -41,29 +43,33 @@ jobs:
       - name: Run PINT
         id: pint
         continue-on-error: true
-        run: vendor/bin/pint --test 2>&1 | tee -a test.log
+        run: |
+          vendor/bin/pint --test 2>&1 | tee -a test.log
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
         working-directory: project
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
-
 
       - name: Install JS dependencies
         continue-on-error: true
         run: npm install
         working-directory: project
 
-
       - name: Run Prettier
         id: prettier
         continue-on-error: true
-        run: npx prettier --write resources/ 2>&1 | tee -a test.log
+        run: |
+          npx prettier --check resources/ 2>&1 | tee -a test.log
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
         working-directory: project
 
       - name: Run ESLint
         id: eslint
         continue-on-error: true
-        run: npx eslint resources/ --max-warnings=0 2>&1 | tee -a test.log
+        run: |
+          npx eslint resources/ --max-warnings=0 2>&1 | tee -a test.log
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
         working-directory: project
 
       - name: Save last 30 lines of log
@@ -77,18 +83,16 @@ jobs:
           echo "$LOG_CONTENT" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
-    
       - name: Set final result
         id: set-result
         run: |
-          if [ "${{ steps.pint.outcome }}" = "failure" ] || \
-             [ "${{ steps.prettier.outcome }}" = "failure" ] || \
-             [ "${{ steps.eslint.outcome }}" = "failure" ]; then
+          if [ "${{ steps.pint.outputs.exit_code }}" != "0" ] || \
+             [ "${{ steps.prettier.outputs.exit_code }}" != "0" ] || \
+             [ "${{ steps.eslint.outputs.exit_code }}" != "0" ]; then
             echo "job_result=failure" >> $GITHUB_OUTPUT
           else
             echo "job_result=success" >> $GITHUB_OUTPUT
           fi
-
 
   notify-discord:
     name: Notify Discord
@@ -96,20 +100,24 @@ jobs:
     needs: [laravel-tests]
     if: always()
     steps:
-      - name: Debug run
-        run: |
-          echo "BOT_URL = ${{ secrets.BOT_URL }}"
-          echo "BOT_TOKEN = ${{ secrets.BOT_TOKEN }}"
-
       - name: Send notification to Discord
         run: |
+          status() {
+            if [ "$1" = "0" ]; then
+              echo "success"
+            else
+              echo "failure"
+            fi
+          }
+
           PAYLOAD=$(jq -n \
           --arg repo "${{ github.event.client_payload.branch_repo }}" \
           --arg run_id "${{ github.run_id }}" \
           --arg pr "${{ github.event.client_payload.pull_request }}" \
-          --arg pint "${{ needs.laravel-tests.result }}" \
-          --arg prettier "${{ needs.laravel-tests.result }}" \
-          --arg eslint "${{ needs.laravel-tests.result }}" \
+          --arg pint "$(status ${{ needs.laravel-tests.outputs.pint }})" \
+          --arg prettier "$(status ${{ needs.laravel-tests.outputs.prettier }})" \
+          --arg eslint "$(status ${{ needs.laravel-tests.outputs.eslint }})" \
+          --arg final "${{ needs.laravel-tests.outputs.result }}" \
           --arg backend_log "${{ needs.laravel-tests.outputs.log }}" \
           '{
             "repo": $repo,
@@ -118,6 +126,7 @@ jobs:
             "PINT": $pint,
             "Prettier": $prettier,
             "ESLint": $eslint,
+            "Final_Result": $final,
             "backend_log": $backend_log
           }')
     
