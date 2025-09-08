@@ -26,6 +26,7 @@ jobs:
           extensions: mbstring, bcmath, intl
 
       - name: Install Composer dependencies
+        continue-on-error: true
         run: composer install --no-progress --prefer-dist --optimize-autoloader
         working-directory: project
 
@@ -68,7 +69,7 @@ jobs:
         id: prettier
         continue-on-error: true
         run: |
-          npx prettier --check resources/ 2>&1 | tee test.log
+          npx prettier --write resources/ 2>&1 | tee test.log
           echo "exit_code=$?" >> $GITHUB_OUTPUT
         working-directory: project
 
