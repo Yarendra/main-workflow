@@ -37,7 +37,7 @@ jobs:
       - name: Install Composer dependencies
         id: composer
         continue-on-error: true
-        run: composer install --no-progress --prefer-dist --optimize-autoloader
+        run: composer install --no-progress --prefer-dist --optimize-autoloader 2>&1 | tee -a test.log
         working-directory: project
 
       - name: Run PINT
@@ -53,7 +53,7 @@ jobs:
 
       - name: Install JS dependencies
         continue-on-error: true
-        run: npm install
+        run: npm install 2>&1 | tee -a test.log
         working-directory: project
 
       - name: Run Prettier
@@ -75,13 +75,14 @@ jobs:
       - name: Save last 30 lines of log
         id: logs
         run: |
-          if [ -f test.log ]; then
-            LOG_CONTENT=$(tail -n 30 test.log)
+          if [ -s test.log ]; then
+            echo "cleaned_log<<EOF" >> "$GITHUB_OUTPUT"
+            tail -n 30 test.log >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+          else
+            echo "cleaned_log=No logs found" >> "$GITHUB_OUTPUT"
           fi
-
-          echo "cleaned_log<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$LOG_CONTENT" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+        working-directory: project
 
       - name: Set final result
         id: set-result
