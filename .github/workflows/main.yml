@@ -1,217 +1,157 @@
-name: Org CI Workflow
+name: Fix & Check (Remote Trigger)
 
 on:
+  pull_request:
+    types: [opened, synchronize, reopened]
   repository_dispatch:
-    types: [trigger-org-ci]
+    types: [trigger-fix-check]
 
 jobs:
-  pint:
-    name: Laravel PINT
+  pr-checks:
+    name: Run Fix & Check on PR
     runs-on: ubuntu-latest
-    outputs:
-      exit_code: ${{ steps.pint.outputs.exit_code }}
+
     steps:
-      - name: Checkout PR Code
+      # Checkout the PR from payload (or normal PR if triggered by PR event)
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.repository.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+        if: github.event_name == 'pull_request'
+
+      - name: Checkout PR from another repo (remote trigger)
         uses: actions/checkout@v4
         with:
           repository: ${{ github.event.client_payload.branch_repo }}
           ref: refs/pull/${{ github.event.client_payload.pull_request }}/merge
           token: ${{ secrets.PAT_FOR_ORG_REPOS }}
           path: project
+        if: github.event_name == 'repository_dispatch'
 
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+      # Setup PHP
+      - uses: shivammathur/setup-php@v2
         with:
-          php-version: ${{ github.event.client_payload.php_version }}
-          extensions: mbstring, bcmath, intl
+          php-version: '8.2'
 
+      # Install PHP dependencies
       - name: Install Composer dependencies
-        continue-on-error: true
         run: composer install --no-progress --prefer-dist --optimize-autoloader
-        working-directory: project
+        working-directory: ${{ github.event_name == 'repository_dispatch' && 'project' || '.' }}
 
-      - name: Run PINT
-        id: pint
-        continue-on-error: true
-        run: |
-          vendor/bin/pint --test 2>&1 | tee test.log
-          echo "exit_code=$?" >> $GITHUB_OUTPUT
-        working-directory: project
-
-      - name: Upload Pint log
-        uses: actions/upload-artifact@v4
+      # Setup Node.js
+      - uses: actions/setup-node@v4
         with:
-          name: pint-log
-          path: project/test.log
+          node-version: '20'
 
-  prettier:
-    name: Prettier
-    runs-on: ubuntu-latest
-    outputs:
-      exit_code: ${{ steps.prettier.outputs.exit_code }}
-    steps:
-      - name: Checkout PR Code
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.event.client_payload.branch_repo }}
-          ref: refs/pull/${{ github.event.client_payload.pull_request }}/merge
-          token: ${{ secrets.PAT_FOR_ORG_REPOS }}
-          path: project
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-
-      - name: Install JS dependencies
+      # Install Node dependencies
+      - name: Install NPM packages
         run: npm install
-        working-directory: project
-
-      - name: Run Prettier
-        id: prettier
+        working-directory: ${{ github.event_name == 'repository_dispatch' && 'project' || '.' }}
         continue-on-error: true
-        run: |
-          npx prettier --write resources/ 2>&1 | tee test.log
-          echo "exit_code=$?" >> $GITHUB_OUTPUT
-        working-directory: project
 
-      - name: Upload Prettier log
-        uses: actions/upload-artifact@v4
-        with:
-          name: prettier-log
-          path: project/test.log
-
-  eslint:
-    name: ESLint
-    runs-on: ubuntu-latest
-    outputs:
-      exit_code: ${{ steps.eslint.outputs.exit_code }}
-    steps:
-      - name: Checkout PR Code
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.event.client_payload.branch_repo }}
-          ref: refs/pull/${{ github.event.client_payload.pull_request }}/merge
-          token: ${{ secrets.PAT_FOR_ORG_REPOS }}
-          path: project
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-
-      - name: Install JS dependencies
-        run: npm install
-        working-directory: project
-
+      # ESLint
       - name: Run ESLint
         id: eslint
         continue-on-error: true
         run: |
-          npx eslint resources/ --max-warnings=0 2>&1 | tee test.log
+          echo "========== ESLINT ==========" > eslint.txt
+          npm run lint:fix >> eslint.txt 2>&1
           echo "exit_code=$?" >> $GITHUB_OUTPUT
-        working-directory: project
-
-      - name: Upload ESLint log
-        uses: actions/upload-artifact@v4
+          exit 0
+        working-directory: ${{ github.event_name == 'repository_dispatch' && 'project' || '.' }}
+      - uses: actions/upload-artifact@v4
         with:
-          name: eslint-log
-          path: project/test.log
+          name: eslint
+          path: eslint.txt
 
-  merge-logs:
-    name: Merge Logs
-    runs-on: ubuntu-latest
-    needs: [pint, prettier, eslint]
-    outputs:
-      log: ${{ steps.logs.outputs.cleaned_log }}
-      pint: ${{ needs.pint.outputs.exit_code }}
-      prettier: ${{ needs.prettier.outputs.exit_code }}
-      eslint: ${{ needs.eslint.outputs.exit_code }}
-      result: ${{ steps.set-result.outputs.job_result }}
-    steps:
-      - name: Download Pint log
-        uses: actions/download-artifact@v4
+      # Prettier
+      - name: Run Prettier
+        id: prettier
+        continue-on-error: true
+        run: |
+          echo "========== PRETTIER ==========" > prettier.txt
+          npm run format >> prettier.txt 2>&1
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          exit 0
+        working-directory: ${{ github.event_name == 'repository_dispatch' && 'project' || '.' }}
+      - uses: actions/upload-artifact@v4
         with:
-          name: pint-log
-          path: logs/pint
+          name: prettier
+          path: prettier.txt
 
-      - name: Download Prettier log
-        uses: actions/download-artifact@v4
+      # Pint
+      - name: Run Pint
+        id: pint
+        continue-on-error: true
+        run: |
+          echo "========== PINT ==========" > pint.txt
+          ./vendor/bin/pint >> pint.txt 2>&1
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          exit 0
+        working-directory: ${{ github.event_name == 'repository_dispatch' && 'project' || '.' }}
+      - uses: actions/upload-artifact@v4
         with:
-          name: prettier-log
-          path: logs/prettier
+          name: pint
+          path: pint.txt
 
-      - name: Download ESLint log
-        uses: actions/download-artifact@v4
+      # PHPStan
+      - name: Run PHPStan
+        id: phpstan
+        continue-on-error: true
+        run: |
+          echo "========== PHPSTAN ==========" > phpstan.txt
+          ./vendor/bin/phpstan analyse --memory-limit=1G >> phpstan.txt 2>&1
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          exit 0
+        working-directory: ${{ github.event_name == 'repository_dispatch' && 'project' || '.' }}
+      - uses: actions/upload-artifact@v4
         with:
-          name: eslint-log
-          path: logs/eslint
+          name: phpstan
+          path: phpstan.txt
 
+      # Merge logs
       - name: Merge logs
-        run: |
-          mkdir -p merged
-          cat logs/pint/test.log >> merged/test.log || true
-          echo "" >> merged/test.log
-          cat logs/prettier/test.log >> merged/test.log || true
-          echo "" >> merged/test.log
-          cat logs/eslint/test.log >> merged/test.log || true
+        run: cat eslint.txt prettier.txt pint.txt phpstan.txt 2>/dev/null > merge.txt
 
-      - name: Save last 30 lines
-        id: logs
-        run: |
-          if [ -s merged/test.log ]; then
-            echo "cleaned_log<<EOF" >> "$GITHUB_OUTPUT"
-            tail -n 30 merged/test.log >> "$GITHUB_OUTPUT"
-            echo "EOF" >> "$GITHUB_OUTPUT"
-          else
-            echo "cleaned_log=No logs found" >> "$GITHUB_OUTPUT"
-          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: merged-log
+          path: merge.txt
 
-      - name: Set final result
-        id: set-result
+      # Notify Discord Bot
+      - name: Notify Discord Bot
+        if: always()
         run: |
-          if [ "${{ needs.pint.outputs.exit_code }}" != "0" ] || \
-             [ "${{ needs.prettier.outputs.exit_code }}" != "0" ] || \
-             [ "${{ needs.eslint.outputs.exit_code }}" != "0" ]; then
-            echo "job_result=failure" >> $GITHUB_OUTPUT
-          else
-            echo "job_result=success" >> $GITHUB_OUTPUT
-          fi
+          ESLINT_STATUS="${{ steps.eslint.outputs.exit_code }}"
+          PRETTIER_STATUS="${{ steps.prettier.outputs.exit_code }}"
+          PINT_STATUS="${{ steps.pint.outputs.exit_code }}"
+          PHPSTAN_STATUS="${{ steps.phpstan.outputs.exit_code }}"
 
-  notify-discord:
-    name: Notify Discord
-    runs-on: ubuntu-latest
-    needs: [merge-logs]
-    if: always()
-    steps:
-      - name: Send notification to Discord
-        run: |
-          status() {
-            if [ "$1" = "0" ]; then
-              echo "success"
-            else
-              echo "failure"
+          FINAL_RESULT="success"
+          for s in "$ESLINT_STATUS" "$PRETTIER_STATUS" "$PINT_STATUS" "$PHPSTAN_STATUS"; do
+            if [[ "$s" == *"❌ FAIL"* ]]; then
+              FINAL_RESULT="failure"
+              break
             fi
-          }
+          done
 
-          PAYLOAD=$(jq -n \
-          --arg repo "${{ github.event.client_payload.branch_repo }}" \
-          --arg run_id "${{ github.run_id }}" \
-          --arg pr "${{ github.event.client_payload.pull_request }}" \
-          --arg pint "$(status ${{ needs.merge-logs.outputs.pint }})" \
-          --arg prettier "$(status ${{ needs.merge-logs.outputs.prettier }})" \
-          --arg eslint "$(status ${{ needs.merge-logs.outputs.eslint }})" \
-          --arg final "${{ needs.merge-logs.outputs.result }}" \
-          --arg backend_log "${{ needs.merge-logs.outputs.log }}" \
-          '{
-            "repo": $repo,
-            "run_id": $run_id,
-            "pr": $pr,
-            "PINT": $pint,
-            "Prettier": $prettier,
-            "ESLint": $eslint,
-            "Final_Result": $final,
-            "backend_log": $backend_log
-          }')
-    
+          echo "Final result: $FINAL_RESULT"
+          LOG_CONTENT=$(jq -Rs . < merge.txt)
+
           curl -X POST "${{ secrets.BOT_URL }}" \
             -H "Authorization: Bearer ${{ secrets.BOT_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD"
-
+            -d "{
+              \"repo\": \"${{ github.repository }}\",
+              \"run_id\": \"${{ github.run_id }}\",
+              \"pr\": \"${{ github.event.client_payload.pull_request || github.event.pull_request.number }}\",
+              \"status\": \"$FINAL_RESULT\",
+              \"pr_user\": \"${{ github.event.client_payload.pr_user || github.event.pull_request.user.login }}\",
+              \"eslint_status\": \"$ESLINT_STATUS\",
+              \"prettier_status\": \"$PRETTIER_STATUS\",
+              \"pint_status\": \"$PINT_STATUS\",
+              \"phpstan_status\": \"$PHPSTAN_STATUS\",
+              \"log\": $LOG_CONTENT
+            }"
